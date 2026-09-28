@@ -2,9 +2,9 @@ export default async function handler(req, res) {
   const url = new URL(req.url, `https://${req.headers.host}`);
   let targetUrl = url.searchParams.get('url');
 
-  // If the input is plain text (not a URL), automatically treat it as a Bing search query
+  // If the input is plain text (e.g. "youtube"), route to FrogFind (Pure HTML Search)
   if (targetUrl && !targetUrl.includes('.') && !targetUrl.startsWith('http')) {
-    targetUrl = `https://www.bing.com/search?q=${encodeURIComponent(targetUrl)}`;
+    targetUrl = `http://frogfind.com/?q=${encodeURIComponent(targetUrl)}`;
   }
 
   // Serve Homepage if no URL parameter is provided
@@ -25,10 +25,10 @@ export default async function handler(req, res) {
       <body>
         <h1>Web Proxy Project</h1>
         <form action="/" method="GET">
-          <input type="text" name="url" placeholder="Type a search query or website URL..." required />
+          <input type="text" name="url" placeholder="Search query or website URL..." required />
           <button type="submit">Go</button>
         </form>
-        <p>Type search words directly (e.g. <b>games</b>) or enter a URL (e.g. <b>wikipedia.org</b>).</p>
+        <p>Type search words directly (e.g. <b>youtube</b>) or a web address (e.g. <b>wikipedia.org</b>).</p>
       </body>
       </html>
     `);
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
 
     const targetObj = new URL(targetUrl);
 
-    // Forward extra parameters
+    // Forward extra query parameters
     for (const [key, value] of url.searchParams.entries()) {
       if (key !== 'url') {
         targetObj.searchParams.set(key, value);
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       method: req.method,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9'
       }
     });
@@ -72,7 +72,15 @@ export default async function handler(req, res) {
         } catch (e) { return match; }
       });
 
-      // Inject a Top Navigation Bar into every web page
+      // Rewrite search form actions
+      html = html.replace(/action=["']([^"']+)["']/g, (match, p1) => {
+        try {
+          const abs = new URL(p1, targetObj.origin).href;
+          return `action="${proxyBase}?url=${encodeURIComponent(abs)}"`;
+        } catch (e) { return match; }
+      });
+
+      // Inject Top Navigation Bar into every proxied page
       const navBarHtml = `
         <div id="proxy-top-bar" style="position:fixed;top:0;left:0;width:100%;height:45px;background:#0f172a;color:white;z-index:2147483647;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,0.5);font-family:sans-serif;margin:0;padding:0;">
           <form action="${proxyBase}" method="GET" style="display:flex;gap:8px;width:90%;max-width:800px;margin:0;padding:0;">
