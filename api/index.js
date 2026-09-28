@@ -2,9 +2,9 @@ export default async function handler(req, res) {
   const url = new URL(req.url, `https://${req.headers.host}`);
   let targetUrl = url.searchParams.get('url');
 
-  // If the input is plain text (e.g. "youtube"), route to FrogFind (Pure HTML Search)
+  // If input is plain text (e.g. "youtube"), route to DuckDuckGo HTML Search
   if (targetUrl && !targetUrl.includes('.') && !targetUrl.startsWith('http')) {
-    targetUrl = `http://frogfind.com/?q=${encodeURIComponent(targetUrl)}`;
+    targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(targetUrl)}`;
   }
 
   // Serve Homepage if no URL parameter is provided
@@ -41,15 +41,9 @@ export default async function handler(req, res) {
 
     const targetObj = new URL(targetUrl);
 
-    // Forward extra query parameters
-    for (const [key, value] of url.searchParams.entries()) {
-      if (key !== 'url') {
-        targetObj.searchParams.set(key, value);
-      }
-    }
-
     const response = await fetch(targetObj.href, {
       method: req.method,
+      redirect: 'follow',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -67,20 +61,20 @@ export default async function handler(req, res) {
       html = html.replace(/href=["']([^"']+)["']/g, (match, p1) => {
         if (p1.startsWith('#') || p1.startsWith('javascript:')) return match;
         try {
-          const abs = new URL(p1, targetObj.origin).href;
+          const abs = new URL(p1, targetObj.href).href;
           return `href="${proxyBase}?url=${encodeURIComponent(abs)}"`;
         } catch (e) { return match; }
       });
 
-      // Rewrite search form actions
+      // Rewrite form actions
       html = html.replace(/action=["']([^"']+)["']/g, (match, p1) => {
         try {
-          const abs = new URL(p1, targetObj.origin).href;
+          const abs = new URL(p1, targetObj.href).href;
           return `action="${proxyBase}?url=${encodeURIComponent(abs)}"`;
         } catch (e) { return match; }
       });
 
-      // Inject Top Navigation Bar into every proxied page
+      // Inject Top Navigation Bar
       const navBarHtml = `
         <div id="proxy-top-bar" style="position:fixed;top:0;left:0;width:100%;height:45px;background:#0f172a;color:white;z-index:2147483647;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,0.5);font-family:sans-serif;margin:0;padding:0;">
           <form action="${proxyBase}" method="GET" style="display:flex;gap:8px;width:90%;max-width:800px;margin:0;padding:0;">
@@ -106,6 +100,14 @@ export default async function handler(req, res) {
     return res.status(response.status).send(Buffer.from(buffer));
 
   } catch (err) {
-    return res.status(500).send('Proxy Error: ' + err.message);
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(200).send(`
+      <div style="font-family:sans-serif;padding:40px;text-align:center;background:#0f172a;color:white;min-height:100vh;">
+        <h2>Unable to load request</h2>
+        <p style="color:#f87171;">Error: ${err.message}</p>
+        <p>Try searching directly for a full URL like <b>https://en.m.wikipedia.org</b></p>
+        <a href="/" style="color:#60a5fa;font-weight:bold;">← Back to Proxy Home</a>
+      </div>
+    `);
   }
 }
